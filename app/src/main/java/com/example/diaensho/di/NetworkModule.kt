@@ -38,7 +38,7 @@ object NetworkModule {
     @Singleton
     fun provideRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit {
         return Retrofit.Builder()
-            .baseUrl("http://api.cogniscribe.com/") // Replace with actual API URL
+            .baseUrl("http://api.cogniscribe.com/") // to be replaced with actual API URL
             .client(okHttpClient)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()

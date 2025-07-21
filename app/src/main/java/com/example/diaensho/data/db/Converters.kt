@@ -1,5 +1,7 @@
 package com.example.diaensho.data.db
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.room.TypeConverter
 import java.time.LocalDate
 import java.time.LocalDateTime
