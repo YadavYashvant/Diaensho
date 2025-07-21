@@ -79,4 +79,4 @@ We are committed to your privacy. All data is stored securely and is only used t
 
 ## 📄 License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE.md) file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
