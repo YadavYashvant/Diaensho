@@ -1,5 +1,7 @@
 package com.example.diaensho.data.network
 
+import com.example.diaensho.data.network.model.AppUsageStatDto
+import com.example.diaensho.data.network.model.DailySummaryDto
 import com.example.diaensho.data.network.model.DiaryEntryDto
 import retrofit2.http.*
 
@@ -16,15 +18,3 @@ interface DiaryApiService {
     @GET("search")
     suspend fun searchEntries(@Query("query") query: String): List<DiaryEntryDto>
 }
-
-data class AppUsageStatDto(
-    val packageName: String,
-    val totalTimeInForeground: Long,
-    val date: String
-)
-
-data class DailySummaryDto(
-    val date: String,
-    val narrative: String,
-    val highlights: List<String>
-)
