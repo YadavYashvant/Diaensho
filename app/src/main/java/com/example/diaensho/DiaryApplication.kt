@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.PowerManager
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import androidx.work.Constraints
@@ -32,14 +33,18 @@ class DiaryApplication : Application(), Configuration.Provider {
     private val powerSettingsReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
-                Intent.ACTION_POWER_SAVE_MODE_CHANGED -> checkAndInitializeWorkManager()
+                PowerManager.ACTION_POWER_SAVE_MODE_CHANGED -> checkAndInitializeWorkManager()
             }
         }
     }
 
     override fun onCreate() {
         super.onCreate()
-        registerReceiver(powerSettingsReceiver, IntentFilter(Intent.ACTION_POWER_SAVE_MODE_CHANGED))
+        registerReceiver(
+            powerSettingsReceiver,
+            IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED),
+            Context.RECEIVER_NOT_EXPORTED
+        )
         initializeWorkManager()
     }
 
@@ -75,8 +80,8 @@ class DiaryApplication : Application(), Configuration.Provider {
         }
     }
 
-    override fun getWorkManagerConfiguration() =
-        Configuration.Builder()
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .setMinimumLoggingLevel(android.util.Log.INFO)
             .build()
