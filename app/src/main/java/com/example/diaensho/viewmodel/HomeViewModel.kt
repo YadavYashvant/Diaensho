@@ -3,10 +3,9 @@ package com.example.diaensho.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.diaensho.data.db.entity.DiaryEntryEntity
+import com.example.diaensho.data.db.entity.AppUsageStatEntity
 import com.example.diaensho.data.repository.MainRepository
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -19,11 +18,29 @@ class HomeViewModel @Inject constructor(
     private val _entries = MutableStateFlow<List<DiaryEntryEntity>>(emptyList())
     val entries: StateFlow<List<DiaryEntryEntity>> = _entries.asStateFlow()
 
-    fun loadEntriesForDate(date: LocalDate) {
+    private val _appUsageStats = MutableStateFlow<List<AppUsageStatEntity>>(emptyList())
+    val appUsageStats: StateFlow<List<AppUsageStatEntity>> = _appUsageStats.asStateFlow()
+
+    private var currentDate: LocalDate = LocalDate.now()
+
+    init {
+        loadDataForDate(currentDate)
+    }
+
+    fun loadDataForDate(date: LocalDate) {
+        currentDate = date
         viewModelScope.launch {
+            // Load diary entries
             repository.getDiaryEntriesForDate(date).collect {
                 _entries.value = it
             }
         }
+
+        viewModelScope.launch {
+            // Load app usage stats
+            repository.getAppUsageStatsForDate(date).collect {
+                _appUsageStats.value = it.sortedByDescending { stat -> stat.totalTimeInForeground }
+            }
+        }
     }
-} 
+}

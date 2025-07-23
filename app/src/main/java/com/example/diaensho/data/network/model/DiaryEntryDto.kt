@@ -9,15 +9,3 @@ data class DiaryEntryDto(
     @Json(name = "text") val text: String,
     @Json(name = "timestamp") val timestamp: String
 )
-
-data class AppUsageStatDto(
-    val packageName: String,
-    val totalTimeInForeground: Long,
-    val date: String
-)
-
-data class DailySummaryDto(
-    val date: String,
-    val narrative: String,
-    val highlights: List<String>
-)
