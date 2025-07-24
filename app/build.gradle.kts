@@ -1,4 +1,3 @@
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -90,9 +89,8 @@ dependencies {
 
     // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.9.0")
-    // If you plan to use Hilt with WorkManager, you might need this:
-    // ksp("androidx.hilt:hilt-compiler:1.1.0") // Hilt WorkManager specific compiler
     implementation("androidx.hilt:hilt-work:1.1.0")
+    ksp("androidx.hilt:hilt-compiler:1.1.0") // Uncomment and fix this line
 
 
     // Coroutines

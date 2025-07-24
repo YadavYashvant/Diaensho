@@ -26,10 +26,11 @@ import android.os.Looper
 class HotwordDetectionService : Service() {
     companion object {
         const val HOTWORD = "dear diary"
+        const val END_PHRASE = "that's it"
         private const val RESTART_DELAY_MS = 1000L
         private const val MAX_RETRY_ATTEMPTS = 3
         private const val RETRY_DELAY_MS = 2000L
-        private const val RECORDING_TIMEOUT_MS = 30000L // 30 seconds
+        private const val RECORDING_TIMEOUT_MS = 300000L // 5 minutes max
     }
 
     @Inject lateinit var repository: MainRepository
@@ -161,57 +162,145 @@ class HotwordDetectionService : Service() {
         val recordIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Recording your diary entry...")
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 500)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         }
+
+        updateNotification("Recording diary entry... Say \"that's it\" when done")
 
         // Set up recording timeout
         recordingTimeoutJob = serviceScope.launch {
             delay(RECORDING_TIMEOUT_MS)
+            updateNotification("Recording timed out after 5 minutes")
             speechRecognizer?.stopListening()
         }
 
+        var currentEntry = StringBuilder()
+        var isFirstResult = true
+
         speechRecognizer?.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {
-                updateNotification("Recording diary entry...")
+                updateNotification("Listening... Say \"that's it\" when done")
+            }
+
+            override fun onBeginningOfSpeech() {
+                updateNotification("Recording your diary entry...")
+            }
+
+            override fun onPartialResults(partialResults: Bundle?) {
+                val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                val partialText = matches?.firstOrNull()
+                if (!partialText.isNullOrBlank()) {
+                    if (partialText.lowercase().trim() == END_PHRASE) {
+                        updateNotification("Saving diary entry...")
+                        saveDiaryEntry(currentEntry.toString())
+                    } else {
+                        if (isFirstResult) {
+                            // Skip the "dear diary" phrase from the actual entry
+                            if (!partialText.lowercase().contains(HOTWORD)) {
+                                currentEntry.append(partialText)
+                            }
+                            isFirstResult = false
+                        } else {
+                            if (currentEntry.isNotEmpty()) currentEntry.append(" ")
+                            currentEntry.append(partialText)
+                        }
+                        updateNotification("Recording: $partialText")
+                    }
+                }
             }
 
             override fun onResults(results: Bundle?) {
-                recordingTimeoutJob?.cancel()
                 val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                val entryText = matches?.firstOrNull()
+                val text = matches?.firstOrNull()
 
-                if (!entryText.isNullOrBlank()) {
-                    serviceScope.launch {
+                if (!text.isNullOrBlank()) {
+                    if (text.lowercase().trim() == END_PHRASE) {
+                        updateNotification("Saving diary entry...")
+                        saveDiaryEntry(currentEntry.toString())
+                    } else {
+                        if (isFirstResult) {
+                            if (!text.lowercase().contains(HOTWORD)) {
+                                currentEntry.append(text)
+                            }
+                            isFirstResult = false
+                        } else {
+                            if (currentEntry.isNotEmpty()) currentEntry.append(" ")
+                            currentEntry.append(text)
+                        }
+                        // Continue listening
                         try {
-                            repository.addDiaryEntry(entryText)
-                            updateNotification("Entry saved successfully!")
+                            speechRecognizer?.startListening(recordIntent)
                         } catch (e: Exception) {
-                            Log.e("HotwordService", "Failed to save entry", e)
-                            updateNotification("Failed to save entry")
-                        } finally {
-                            delay(2000) // Show success/error message briefly
-                            resetToHotwordDetection()
+                            Log.e("HotwordService", "Error restarting listening", e)
+                            handler.postDelayed({
+                                try {
+                                    speechRecognizer?.startListening(recordIntent)
+                                } catch (e: Exception) {
+                                    saveDiaryEntry(currentEntry.toString())
+                                }
+                            }, 1000)
                         }
                     }
-                } else {
-                    updateNotification("No speech detected")
-                    resetToHotwordDetection()
                 }
             }
 
             override fun onError(error: Int) {
-                recordingTimeoutJob?.cancel()
-                Log.e("HotwordService", "Error recording diary entry: $error")
-                updateNotification("Error recording entry")
-                resetToHotwordDetection()
+                val errorMessage = when (error) {
+                    SpeechRecognizer.ERROR_NO_MATCH -> {
+                        // If we have content and get a no-match error, just keep listening
+                        if (currentEntry.isNotEmpty()) {
+                            try {
+                                speechRecognizer?.startListening(recordIntent)
+                                return
+                            } catch (e: Exception) {
+                                "Speech recognition error, saving current entry"
+                            }
+                        } else {
+                            "No speech detected, please try again"
+                        }
+                    }
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
+                        if (currentEntry.isNotEmpty()) {
+                            "Speech timeout, saving current entry"
+                        } else {
+                            "Speech timeout, please try again"
+                        }
+                    }
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
+                        handler.postDelayed({
+                            try {
+                                speechRecognizer?.startListening(recordIntent)
+                            } catch (e: Exception) {
+                                saveDiaryEntry(currentEntry.toString())
+                            }
+                        }, 1000)
+                        return
+                    }
+                    else -> "Recognition error: $error"
+                }
+
+                Log.e("HotwordService", "Error recording diary entry: $error ($errorMessage)")
+                updateNotification(errorMessage)
+
+                if (currentEntry.isNotEmpty()) {
+                    saveDiaryEntry(currentEntry.toString())
+                } else {
+                    resetToHotwordDetection()
+                }
             }
 
-            // Implement remaining RecognitionListener methods
-            override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onRmsChanged(rmsdB: Float) {
+                // Update notification with audio level indicator
+                val level = (rmsdB / 10).toInt().coerceIn(0, 5)
+                val indicator = "▌".repeat(level)
+                updateNotification("Recording: $indicator")
+            }
+
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() {}
-            override fun onPartialResults(partialResults: Bundle?) {}
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })
 
@@ -219,8 +308,36 @@ class HotwordDetectionService : Service() {
             speechRecognizer?.startListening(recordIntent)
         } catch (e: Exception) {
             Log.e("HotwordService", "Error starting diary entry recording", e)
-            recordingTimeoutJob?.cancel()
+            updateNotification("Failed to start recording, trying again...")
+            handler.postDelayed({
+                try {
+                    speechRecognizer?.startListening(recordIntent)
+                } catch (e: Exception) {
+                    resetToHotwordDetection()
+                }
+            }, 1000)
+        }
+    }
+
+    private fun saveDiaryEntry(text: String) {
+        if (text.isBlank()) {
+            updateNotification("No entry recorded")
             resetToHotwordDetection()
+            return
+        }
+
+        recordingTimeoutJob?.cancel()
+        serviceScope.launch {
+            try {
+                repository.addDiaryEntry(text)
+                updateNotification("Entry saved successfully!")
+            } catch (e: Exception) {
+                Log.e("HotwordService", "Failed to save entry", e)
+                updateNotification("Failed to save entry")
+            } finally {
+                delay(2000)
+                resetToHotwordDetection()
+            }
         }
     }
 
