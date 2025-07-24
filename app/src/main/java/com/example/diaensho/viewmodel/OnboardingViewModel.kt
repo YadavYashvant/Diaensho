@@ -55,4 +55,7 @@ class OnboardingViewModel @Inject constructor(
             )
         }
     }
+
+    fun getBatteryOptimizationIntent() = powerManagerHelper.getRequestIgnoreBatteryOptimizationsIntent()
+
 }

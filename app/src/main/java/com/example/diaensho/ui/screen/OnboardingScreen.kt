@@ -64,10 +64,7 @@ fun OnboardingScreen(
         PermissionButton(
             text = if (uiState.batteryOptimizationDisabled) "✓ Battery Optimization Disabled" else "Disable Battery Optimization",
             onClick = {
-                context.startActivity(
-                    (context.getSystemService("power") as PowerManagerHelper)
-                        .getRequestIgnoreBatteryOptimizationsIntent()
-                )
+                context.startActivity(onboardingViewModel.getBatteryOptimizationIntent())
             },
             enabled = !uiState.batteryOptimizationDisabled,
             description = "Required for reliable voice detection"

@@ -1,9 +1,10 @@
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    kotlin("kapt")
-    id("com.google.dagger.hilt.android")
+//    kotlin("kapt")
+    alias(libs.plugins.hilt.android)
     alias(libs.plugins.ksp)
 }
 
@@ -71,9 +72,9 @@ dependencies {
     implementation("androidx.compose.runtime:runtime-livedata")
 
     // Hilt
-    implementation("com.google.dagger:hilt-android:2.48")
-    kapt("com.google.dagger:hilt-compiler:2.48")
-    implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
+    implementation(libs.androidx.hilt.navigation.compose)
 
     // Room
     implementation("androidx.room:room-runtime:2.6.1")
@@ -89,7 +90,10 @@ dependencies {
 
     // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.9.0")
+    // If you plan to use Hilt with WorkManager, you might need this:
+    // ksp("androidx.hilt:hilt-compiler:1.1.0") // Hilt WorkManager specific compiler
     implementation("androidx.hilt:hilt-work:1.1.0")
+
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")

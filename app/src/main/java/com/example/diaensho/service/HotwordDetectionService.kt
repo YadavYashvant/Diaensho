@@ -72,7 +72,7 @@ class HotwordDetectionService : Service() {
         if (isListening) return
 
         try {
-            val intent = RecognizerIntent.getVoiceDetailsIntent(this).apply {
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
@@ -158,7 +158,7 @@ class HotwordDetectionService : Service() {
     }
 
     private fun startRecordingDiaryEntry() {
-        val recordIntent = RecognizerIntent.getVoiceDetailsIntent(this).apply {
+        val recordIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             putExtra(RecognizerIntent.EXTRA_PROMPT, "Recording your diary entry...")
