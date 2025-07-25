@@ -1,5 +1,5 @@
 # Diaensho - The AI-Powered Audio Diary (Android App)
-
+## (🏗️ UNDER CONSTRUCTION)
 Diaensho is an intelligent, AI-powered audio diary designed to effortlessly capture your spoken thoughts, track digital habits, and transform your daily experiences into insightful, searchable summaries. This repository contains the native Android application built with the latest modern development practices.
 
 ---
