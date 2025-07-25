@@ -9,7 +9,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.diaensho.util.PowerManagerHelper
 import com.example.diaensho.viewmodel.OnboardingViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
