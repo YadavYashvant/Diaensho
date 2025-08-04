@@ -6,15 +6,18 @@ import com.example.diaensho.data.network.model.DiaryEntryDto
 import retrofit2.http.*
 
 interface DiaryApiService {
-    @POST("entries")
+    @POST("api/entries")
     suspend fun createEntry(@Body entry: DiaryEntryDto): DiaryEntryDto
 
-    @POST("usage-stats")
+    @POST("api/usage-stats")
     suspend fun uploadUsageStats(@Body stats: List<AppUsageStatDto>): List<AppUsageStatDto>
 
-    @GET("summaries")
+    @POST("api/usage-stats/batch")
+    suspend fun uploadBatchUsageStats(@Body stats: List<AppUsageStatDto>): List<AppUsageStatDto>
+
+    @GET("api/summaries")
     suspend fun getDailySummary(@Query("date") date: String): DailySummaryDto
 
-    @GET("search")
-    suspend fun searchEntries(@Query("query") query: String): List<DiaryEntryDto>
+    @GET("api/search")
+    suspend fun searchEntries(@Query("q") query: String): List<DiaryEntryDto>
 }

@@ -63,7 +63,12 @@ fun OnboardingScreen(
         PermissionButton(
             text = if (uiState.batteryOptimizationDisabled) "✓ Battery Optimization Disabled" else "Disable Battery Optimization",
             onClick = {
-                context.startActivity(onboardingViewModel.getBatteryOptimizationIntent())
+                try {
+                    context.startActivity(onboardingViewModel.getBatteryOptimizationIntent())
+                } catch (e: Exception) {
+                    // Handle the case where the intent cannot be started
+                    android.util.Log.e("OnboardingScreen", "Failed to start battery optimization intent", e)
+                }
             },
             enabled = !uiState.batteryOptimizationDisabled,
             description = "Required for reliable voice detection"

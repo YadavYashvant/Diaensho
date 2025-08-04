@@ -1,10 +1,6 @@
 package com.example.diaensho.data.db.dao
 
-import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
-import androidx.room.Query
-import androidx.room.Update
+import androidx.room.*
 import com.example.diaensho.data.db.entity.DiaryEntryEntity
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDateTime
@@ -20,12 +16,21 @@ interface DiaryEntryDao {
     @Query("SELECT * FROM diary_entries WHERE isSynced = 0")
     suspend fun getUnsyncedEntries(): List<DiaryEntryEntity>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert
     suspend fun insert(entry: DiaryEntryEntity): Long
+
+    @Insert
+    suspend fun insertAll(entries: List<DiaryEntryEntity>)
 
     @Update
     suspend fun update(entry: DiaryEntryEntity)
 
+    @Delete
+    suspend fun delete(entry: DiaryEntryEntity)
+
     @Query("UPDATE diary_entries SET isSynced = 1 WHERE id IN (:ids)")
     suspend fun markAsSynced(ids: List<Long>)
+
+    @Query("DELETE FROM diary_entries WHERE id = :id")
+    suspend fun deleteById(id: Long)
 }

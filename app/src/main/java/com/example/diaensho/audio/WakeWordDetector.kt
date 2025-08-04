@@ -24,7 +24,6 @@ class WakeWordDetector @Inject constructor(
             Porcupine.BuiltInKeyword.COMPUTER,
             Porcupine.BuiltInKeyword.ALEXA
         )
-        // Access key is now loaded from BuildConfig (secure)
     }
 
     private var porcupine: Porcupine? = null
@@ -52,9 +51,17 @@ class WakeWordDetector @Inject constructor(
         return try {
             _detectionState.value = DetectionState.INITIALIZING
 
-            // Initialize Porcupine with built-in keywords (free tier)
+            // Check if access key is provided
+            val accessKey = BuildConfig.PORCUPINE_ACCESS_KEY
+            if (accessKey.isEmpty()) {
+                Log.e(TAG, "No Porcupine access key provided. Please add your key to local.properties")
+                _detectionState.value = DetectionState.ERROR
+                return false
+            }
+
+            // Initialize Porcupine with built-in keywords
             val porcupineBuilder = Porcupine.Builder()
-                .setAccessKey(BuildConfig.PORCUPINE_ACCESS_KEY) // Empty for free tier with built-in keywords
+                .setAccessKey(accessKey)
                 .setKeywords(BUILT_IN_KEYWORDS)
 
             porcupine = porcupineBuilder.build(context)

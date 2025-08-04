@@ -1,17 +1,11 @@
 package com.example.diaensho.audio
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Log
-import androidx.annotation.RequiresPermission
-import androidx.core.app.ActivityCompat
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,86 +26,65 @@ class AudioManager @Inject constructor(
     private var recordingJob: Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val _audioState = MutableStateFlow(AudioState.IDLE)
-    val audioState: StateFlow<AudioState> = _audioState
-
-    private val _audioLevel = MutableStateFlow(0f)
-    val audioLevel: StateFlow<Float> = _audioLevel
-
-    enum class AudioState {
-        IDLE, INITIALIZING, RECORDING, ERROR
-    }
-
-    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     fun startRecording(onAudioData: (ShortArray) -> Unit): Boolean {
         if (isRecording) {
             Log.w(TAG, "Already recording")
             return false
         }
 
-        if (!hasRecordPermission()) {
-            Log.e(TAG, "No record permission")
-            _audioState.value = AudioState.ERROR
-            return false
-        }
-
         return try {
-            _audioState.value = AudioState.INITIALIZING
-
-            val bufferSize = AudioRecord.getMinBufferSize(
-                SAMPLE_RATE,
-                CHANNEL_CONFIG,
-                AUDIO_FORMAT
-            ) * BUFFER_SIZE_FACTOR
-
+            val bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
             if (bufferSize == AudioRecord.ERROR || bufferSize == AudioRecord.ERROR_BAD_VALUE) {
                 Log.e(TAG, "Invalid buffer size: $bufferSize")
-                _audioState.value = AudioState.ERROR
                 return false
             }
+
+            val actualBufferSize = bufferSize * BUFFER_SIZE_FACTOR
 
             audioRecord = AudioRecord(
                 MediaRecorder.AudioSource.MIC,
                 SAMPLE_RATE,
                 CHANNEL_CONFIG,
                 AUDIO_FORMAT,
-                bufferSize
+                actualBufferSize
             )
 
             if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-                Log.e(TAG, "AudioRecord not initialized properly")
-                _audioState.value = AudioState.ERROR
+                Log.e(TAG, "AudioRecord not initialized")
+                audioRecord?.release()
+                audioRecord = null
                 return false
             }
 
             audioRecord?.startRecording()
             isRecording = true
-            _audioState.value = AudioState.RECORDING
 
             recordingJob = scope.launch {
-                val buffer = ShortArray(bufferSize / 2) // Short is 2 bytes
+                val buffer = ShortArray(bufferSize / 2) // Short array is half the size of byte buffer
 
-                while (isRecording && audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-                    val readResult = audioRecord?.read(buffer, 0, buffer.size) ?: 0
-
-                    if (readResult > 0) {
-                        // Calculate audio level for visual feedback
-                        val level = calculateAudioLevel(buffer, readResult)
-                        _audioLevel.value = level
-
-                        // Pass audio data to callback
-                        onAudioData(buffer.copyOf(readResult))
-                    } else {
-                        Log.w(TAG, "AudioRecord read error: $readResult")
-                        delay(10) // Small delay to prevent tight loop
+                while (isRecording && !Thread.currentThread().isInterrupted) {
+                    try {
+                        val bytesRead = audioRecord?.read(buffer, 0, buffer.size) ?: 0
+                        if (bytesRead > 0) {
+                            val audioData = buffer.copyOf(bytesRead)
+                            onAudioData(audioData)
+                        } else if (bytesRead < 0) {
+                            Log.e(TAG, "Error reading audio data: $bytesRead")
+                            break
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error in recording loop", e)
+                        break
                     }
                 }
             }
 
+            Log.i(TAG, "Audio recording started successfully")
             true
+
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to start recording", e)
-            _audioState.value = AudioState.ERROR
+            Log.e(TAG, "Failed to start audio recording", e)
+            stopRecording()
             false
         }
     }
@@ -126,27 +99,10 @@ class AudioManager @Inject constructor(
             audioRecord?.stop()
             audioRecord?.release()
             audioRecord = null
-            _audioState.value = AudioState.IDLE
-            _audioLevel.value = 0f
+            Log.i(TAG, "Audio recording stopped")
         } catch (e: Exception) {
-            Log.e(TAG, "Error stopping recording", e)
+            Log.e(TAG, "Error stopping audio recording", e)
         }
-    }
-
-    private fun calculateAudioLevel(buffer: ShortArray, length: Int): Float {
-        var sum = 0.0
-        for (i in 0 until length) {
-            sum += (buffer[i] * buffer[i]).toDouble()
-        }
-        val rms = kotlin.math.sqrt(sum / length)
-        return (rms / Short.MAX_VALUE).toFloat()
-    }
-
-    private fun hasRecordPermission(): Boolean {
-        return ActivityCompat.checkSelfPermission(
-            context,
-            Manifest.permission.RECORD_AUDIO
-        ) == PackageManager.PERMISSION_GRANTED
     }
 
     fun release() {

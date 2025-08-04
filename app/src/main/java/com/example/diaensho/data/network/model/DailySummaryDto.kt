@@ -5,9 +5,11 @@ import com.squareup.moshi.JsonClass
 
 @JsonClass(generateAdapter = true)
 data class DailySummaryDto(
+    @Json(name = "id") val id: Long? = null,
     @Json(name = "date") val date: String,
-    @Json(name = "diaryEntries") val diaryEntries: List<DiaryEntryDto>,
-    @Json(name = "appUsageStats") val appUsageStats: List<AppUsageStatDto>,
-    @Json(name = "totalUsageTime") val totalUsageTime: Long,
-    @Json(name = "mostUsedApps") val mostUsedApps: List<String>
+    @Json(name = "summary") val summary: String,
+    @Json(name = "highlights") val highlights: List<String> = emptyList(),
+    @Json(name = "mood") val mood: String? = null,
+    @Json(name = "wordCount") val wordCount: Int = 0,
+    @Json(name = "entryCount") val entryCount: Int = 0
 )

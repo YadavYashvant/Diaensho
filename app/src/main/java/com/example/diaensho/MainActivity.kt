@@ -1,207 +1,232 @@
 package com.example.diaensho
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.app.AppOpsManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
-import android.os.Process
 import android.provider.Settings
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.example.diaensho.service.HotwordDetectionService
 import com.example.diaensho.ui.screen.*
+import com.example.diaensho.ui.theme.DiaenshoTheme
+import com.example.diaensho.viewmodel.AuthViewModel
 import com.example.diaensho.viewmodel.OnboardingViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import java.time.LocalDate
 
-sealed class Screen {
-    object Onboarding : Screen()
-    object Home : Screen()
-    object Search : Screen()
-}
-
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    private var hotwordServiceIntent: Intent? = null
+    private val requestMicrophonePermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        onboardingViewModel?.setMicrophonePermission(isGranted)
+    }
 
-    @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
+    private val requestUsageStatsPermission = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        onboardingViewModel?.setUsageStatsPermission(hasUsageStatsPermission())
+    }
+
+    private var onboardingViewModel: OnboardingViewModel? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-
-        hotwordServiceIntent = Intent(this, HotwordDetectionService::class.java)
 
         setContent {
-            var currentScreen by remember { mutableStateOf<Screen>(Screen.Onboarding) }
-            val onboardingViewModel: OnboardingViewModel = viewModel()
-            var selectedDate by remember { mutableStateOf(LocalDate.now()) }
-
-            // Permission launchers
-            val requestNotificationPermissionLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.RequestPermission()
-            ) { }
-
-            val requestMicPermissionLauncher = rememberActivityResultLauncher(
-                onboardingViewModel = onboardingViewModel
-            )
-
-            // Check notification permission on launch for Android 13+
-            LaunchedEffect(Unit) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    val hasNotificationPermission = ContextCompat.checkSelfPermission(
-                        this@MainActivity,
-                        Manifest.permission.POST_NOTIFICATIONS
-                    ) == PackageManager.PERMISSION_GRANTED
-
-                    if (!hasNotificationPermission) {
-                        requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    }
-                }
-            }
-
-            // Check permissions after activity resume
-            val lifecycleOwner = LocalLifecycleOwner.current
-            DisposableEffect(lifecycleOwner) {
-                val observer = LifecycleEventObserver { _, event ->
-                    if (event == Lifecycle.Event.ON_RESUME) {
-                        checkInitialPermissions(onboardingViewModel)
-                    }
-                }
-                lifecycleOwner.lifecycle.addObserver(observer)
-                onDispose {
-                    lifecycleOwner.lifecycle.removeObserver(observer)
-                }
-            }
-
-            // Monitor permission state changes
-            val uiState by onboardingViewModel.uiState.collectAsStateWithLifecycle()
-
-            // Start/stop service based on permissions
-            LaunchedEffect(
-                uiState.microphonePermissionGranted,
-                uiState.usageStatsPermissionGranted,
-                uiState.batteryOptimizationDisabled
-            ) {
-                handleServiceLifecycle(
-                    micPermissionGranted = uiState.microphonePermissionGranted,
-                    usageStatsPermissionGranted = uiState.usageStatsPermissionGranted,
-                    batteryOptimizationDisabled = uiState.batteryOptimizationDisabled
-                )
-            }
-
-            Scaffold(modifier = Modifier.fillMaxSize()) {
-                when (currentScreen) {
-                    Screen.Onboarding -> OnboardingScreen(
-                        onboardingViewModel = onboardingViewModel,
-                        onPermissionsGranted = { currentScreen = Screen.Home },
-                        onRequestMicPermission = {
-                            requestMicPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                        },
-                        onRequestUsageStatsPermission = {
-                            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-                        }
-                    )
-                    Screen.Home -> HomeScreen(
-                        selectedDate = selectedDate,
-                        onDateChange = { selectedDate = it },
-                        onSearchClick = { currentScreen = Screen.Search }
-                    )
-                    Screen.Search -> SearchScreen(
-                        onBack = { currentScreen = Screen.Home }
-                    )
+            DiaenshoTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    MainApp()
                 }
             }
         }
     }
 
-    private fun checkInitialPermissions(viewModel: OnboardingViewModel) {
-        viewModel.setMicrophonePermission(checkMicrophonePermission())
-        viewModel.setUsageStatsPermission(checkUsageStatsPermission())
-        viewModel.checkBatteryOptimization()
+    @Composable
+    private fun MainApp() {
+        val navController = rememberNavController()
+        val authViewModel: AuthViewModel = viewModel()
+        val authUiState by authViewModel.uiState.collectAsStateWithLifecycle()
+
+        var selectedDate by remember { mutableStateOf(LocalDate.now()) }
+
+        // Determine start destination based on auth state
+        val startDestination = when {
+            !authUiState.isSignedIn -> "signin"
+            !authUiState.isOnboardingCompleted -> "onboarding"
+            else -> "home"
+        }
+
+        LaunchedEffect(authUiState.isSignedIn, authUiState.isOnboardingCompleted) {
+            when {
+                !authUiState.isSignedIn -> {
+                    navController.navigate("signin") {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+                authUiState.isSignedIn && !authUiState.isOnboardingCompleted -> {
+                    navController.navigate("onboarding") {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+                authUiState.isSignedIn && authUiState.isOnboardingCompleted -> {
+                    navController.navigate("home") {
+                        popUpTo(0) { inclusive = true }
+                    }
+                    // Start the hotword service after successful auth and onboarding
+                    startHotwordService()
+                }
+            }
+        }
+
+        NavHost(
+            navController = navController,
+            startDestination = startDestination
+        ) {
+            // Authentication screens
+            composable("signin") {
+                SignInScreen(
+                    authViewModel = authViewModel,
+                    onSignInSuccess = {
+                        if (authUiState.isOnboardingCompleted) {
+                            navController.navigate("home") {
+                                popUpTo("signin") { inclusive = true }
+                            }
+                        } else {
+                            navController.navigate("onboarding") {
+                                popUpTo("signin") { inclusive = true }
+                            }
+                        }
+                    },
+                    onNavigateToSignUp = {
+                        navController.navigate("signup")
+                    }
+                )
+            }
+
+            composable("signup") {
+                SignUpScreen(
+                    authViewModel = authViewModel,
+                    onSignUpSuccess = {
+                        if (authUiState.isOnboardingCompleted) {
+                            navController.navigate("home") {
+                                popUpTo("signup") { inclusive = true }
+                            }
+                        } else {
+                            navController.navigate("onboarding") {
+                                popUpTo("signup") { inclusive = true }
+                            }
+                        }
+                    },
+                    onNavigateToSignIn = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            // Onboarding screen
+            composable("onboarding") {
+                val onboardingVM: OnboardingViewModel = viewModel()
+                onboardingViewModel = onboardingVM
+
+                // Check permissions on composition
+                LaunchedEffect(Unit) {
+                    onboardingVM.setMicrophonePermission(hasMicrophonePermission())
+                    onboardingVM.setUsageStatsPermission(hasUsageStatsPermission())
+                    onboardingVM.checkBatteryOptimization()
+                }
+
+                OnboardingScreen(
+                    onboardingViewModel = onboardingVM,
+                    onPermissionsGranted = {
+                        authViewModel.completeOnboarding()
+                        navController.navigate("home") {
+                            popUpTo("onboarding") { inclusive = true }
+                        }
+                    },
+                    onRequestMicPermission = { requestMicrophonePermission() },
+                    onRequestUsageStatsPermission = { requestUsageStatsPermission() }
+                )
+            }
+
+            // Main app screens
+            composable("home") {
+                HomeScreen(
+                    selectedDate = selectedDate,
+                    onDateChange = { selectedDate = it },
+                    onSearchClick = {
+                        navController.navigate("search")
+                    }
+                )
+            }
+
+            composable("search") {
+                SearchScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
+        }
     }
 
-    private fun checkMicrophonePermission(): Boolean {
+    private fun requestMicrophonePermission() {
+        requestMicrophonePermission.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    private fun requestUsageStatsPermission() {
+        val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+        requestUsageStatsPermission.launch(intent)
+    }
+
+    private fun hasMicrophonePermission(): Boolean {
         return ContextCompat.checkSelfPermission(
             this,
             Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
     }
 
-    private fun checkUsageStatsPermission(): Boolean {
-        val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            appOps.unsafeCheckOpNoThrow(
-                AppOpsManager.OPSTR_GET_USAGE_STATS,
-                Process.myUid(),
-                packageName
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            appOps.checkOpNoThrow(
-                AppOpsManager.OPSTR_GET_USAGE_STATS,
-                Process.myUid(),
-                packageName
-            )
-        }
+    private fun hasUsageStatsPermission(): Boolean {
+        val appOpsManager = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+        val mode = appOpsManager.checkOpNoThrow(
+            AppOpsManager.OPSTR_GET_USAGE_STATS,
+            android.os.Process.myUid(),
+            packageName
+        )
         return mode == AppOpsManager.MODE_ALLOWED
     }
 
-    private fun handleServiceLifecycle(
-        micPermissionGranted: Boolean,
-        usageStatsPermissionGranted: Boolean,
-        batteryOptimizationDisabled: Boolean
-    ) {
-        if (micPermissionGranted && usageStatsPermissionGranted && batteryOptimizationDisabled) {
-            startHotwordService()
-        } else {
-            stopHotwordService()
-        }
-    }
-
     private fun startHotwordService() {
-        hotwordServiceIntent?.let { intent ->
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(intent)
-            } else {
-                startService(intent)
-            }
+        if (hasMicrophonePermission()) {
+            val serviceIntent = Intent(this, HotwordDetectionService::class.java)
+            startForegroundService(serviceIntent)
         }
     }
 
-    private fun stopHotwordService() {
-        hotwordServiceIntent?.let { stopService(it) }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        stopHotwordService()
+    override fun onResume() {
+        super.onResume()
+        // Update onboarding permissions when returning to the app
+        onboardingViewModel?.let { vm ->
+            vm.setMicrophonePermission(hasMicrophonePermission())
+            vm.setUsageStatsPermission(hasUsageStatsPermission())
+            vm.checkBatteryOptimization()
+        }
     }
 }
-
-@Composable
-private fun rememberActivityResultLauncher(
-    onboardingViewModel: OnboardingViewModel
-) = rememberLauncherForActivityResult(
-    contract = ActivityResultContracts.RequestPermission(),
-    onResult = { granted ->
-        onboardingViewModel.setMicrophonePermission(granted)
-    }
-)

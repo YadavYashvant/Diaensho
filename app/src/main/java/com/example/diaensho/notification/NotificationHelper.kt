@@ -1,5 +1,6 @@
 package com.example.diaensho.notification
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -14,11 +15,13 @@ class NotificationHelper @Inject constructor(
     private val context: Context
 ) {
     companion object {
-        const val HOTWORD_CHANNEL_ID = "HotwordDetectionChannel"
-        const val SYNC_CHANNEL_ID = "SyncChannel"
-        const val HOTWORD_NOTIFICATION_ID = 1
-        const val SYNC_NOTIFICATION_ID = 2
+        const val HOTWORD_NOTIFICATION_ID = 1001
+        const val SYNC_NOTIFICATION_ID = 1002
+        private const val HOTWORD_CHANNEL_ID = "hotword_detection"
+        private const val SYNC_CHANNEL_ID = "data_sync"
     }
+
+    private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
     init {
         createNotificationChannels()
@@ -26,61 +29,63 @@ class NotificationHelper @Inject constructor(
 
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // Hotword detection channel
             val hotwordChannel = NotificationChannel(
                 HOTWORD_CHANNEL_ID,
-                "Hotword Detection",
+                "Voice Detection",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Shows the status of voice recognition"
+                description = "Shows when the app is listening for voice commands"
                 setShowBadge(false)
             }
 
+            // Data sync channel
             val syncChannel = NotificationChannel(
                 SYNC_CHANNEL_ID,
-                "Data Synchronization",
+                "Data Sync",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Shows sync status of diary entries and app usage"
+                description = "Shows progress of data synchronization"
                 setShowBadge(false)
             }
 
-            val notificationManager = context.getSystemService(NotificationManager::class.java)
             notificationManager.createNotificationChannels(listOf(hotwordChannel, syncChannel))
         }
     }
 
-    fun createHotwordNotification(message: String = "Listening for hotword...") =
-        NotificationCompat.Builder(context, HOTWORD_CHANNEL_ID)
-            .setContentTitle("Cogniscribe Active")
-            .setContentText(message)
-            .setSmallIcon(R.drawable.ic_notification)
+    fun createHotwordNotification(status: String): Notification {
+        return NotificationCompat.Builder(context, HOTWORD_CHANNEL_ID)
+            .setContentTitle("Diaensho Voice Assistant")
+            .setContentText(status)
+            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setOngoing(true)
             .setSilent(true)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
+    }
 
-    fun createSyncNotification(message: String) =
-        NotificationCompat.Builder(context, SYNC_CHANNEL_ID)
-            .setContentTitle("Syncing Data")
-            .setContentText(message)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setOngoing(true)
-            .setSilent(true)
-            .build()
-
-    fun updateHotwordNotification(message: String) {
-        val notification = createHotwordNotification(message)
-        val notificationManager = context.getSystemService(NotificationManager::class.java)
+    fun updateHotwordNotification(status: String) {
+        val notification = createHotwordNotification(status)
         notificationManager.notify(HOTWORD_NOTIFICATION_ID, notification)
     }
 
-    fun updateSyncNotification(message: String) {
-        val notification = createSyncNotification(message)
-        val notificationManager = context.getSystemService(NotificationManager::class.java)
+    fun createSyncNotification(status: String): Notification {
+        return NotificationCompat.Builder(context, SYNC_CHANNEL_ID)
+            .setContentTitle("Syncing Data")
+            .setContentText(status)
+            .setSmallIcon(android.R.drawable.stat_sys_upload)
+            .setOngoing(true)
+            .setSilent(true)
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .build()
+    }
+
+    fun updateSyncNotification(status: String) {
+        val notification = createSyncNotification(status)
         notificationManager.notify(SYNC_NOTIFICATION_ID, notification)
     }
 
     fun cancelSyncNotification() {
-        val notificationManager = context.getSystemService(NotificationManager::class.java)
         notificationManager.cancel(SYNC_NOTIFICATION_ID)
     }
 }
