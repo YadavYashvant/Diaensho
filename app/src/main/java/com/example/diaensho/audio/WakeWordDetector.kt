@@ -5,6 +5,7 @@ import android.Manifest
 import android.content.Context
 import android.util.Log
 import androidx.annotation.RequiresPermission
+import com.example.diaensho.BuildConfig
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,7 +24,7 @@ class WakeWordDetector @Inject constructor(
             Porcupine.BuiltInKeyword.COMPUTER,
             Porcupine.BuiltInKeyword.ALEXA
         )
-        private const val ACCESS_KEY = "Y531/lrxl6J8CcOti3Azsdeev6nobt1thBsVHAV12UOjHDBNckficA==" // Free tier - leave empty for built-in keywords
+        // Access key is now loaded from BuildConfig (secure)
     }
 
     private var porcupine: Porcupine? = null
@@ -53,7 +54,7 @@ class WakeWordDetector @Inject constructor(
 
             // Initialize Porcupine with built-in keywords (free tier)
             val porcupineBuilder = Porcupine.Builder()
-                .setAccessKey(ACCESS_KEY) // Empty for free tier with built-in keywords
+                .setAccessKey(BuildConfig.PORCUPINE_ACCESS_KEY) // Empty for free tier with built-in keywords
                 .setKeywords(BUILT_IN_KEYWORDS)
 
             porcupine = porcupineBuilder.build(context)
