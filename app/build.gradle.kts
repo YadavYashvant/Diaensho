@@ -105,4 +105,10 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+
+    // Porcupine Wake Word Engine (Free tier)
+    implementation("ai.picovoice:porcupine-android:3.0.1")
+
+    // Additional audio processing
+    implementation("com.github.wendykierp:JTransforms:3.1")
 }

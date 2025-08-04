@@ -1,5 +1,6 @@
 package com.example.diaensho.data.repository
 
+import android.util.Log
 import com.example.diaensho.data.db.dao.AppUsageStatDao
 import com.example.diaensho.data.db.dao.DiaryEntryDao
 import com.example.diaensho.data.db.entity.AppUsageStatEntity
@@ -23,11 +24,18 @@ class MainRepository @Inject constructor(
 ) {
     // Diary Entry Operations
     suspend fun addDiaryEntry(text: String) {
+        Log.d("MainRepository", "Attempting to save diary entry: '$text'")
         val entry = DiaryEntryEntity(
             text = text,
             timestamp = LocalDateTime.now()
         )
-        diaryEntryDao.insert(entry)
+        try {
+            val entryId = diaryEntryDao.insert(entry)
+            Log.i("MainRepository", "Diary entry saved successfully with ID: $entryId, content: '$text'")
+        } catch (e: Exception) {
+            Log.e("MainRepository", "Failed to save diary entry: '$text'", e)
+            throw e
+        }
     }
 
     fun getDiaryEntries(): Flow<List<DiaryEntryEntity>> {

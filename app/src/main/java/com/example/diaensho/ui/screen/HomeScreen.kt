@@ -1,5 +1,6 @@
 package com.example.diaensho.ui.screen
 
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,6 +12,7 @@ import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +36,11 @@ fun HomeScreen(
     val entries by homeViewModel.entries.collectAsStateWithLifecycle()
     val appUsageStats by homeViewModel.appUsageStats.collectAsStateWithLifecycle()
 
+    // Update ViewModel when date changes
+    LaunchedEffect(selectedDate) {
+        homeViewModel.loadDataForDate(selectedDate)
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         // Date selector
         DateSelector(
@@ -50,17 +57,60 @@ fun HomeScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         // Diary entries
-        Text(
-            text = "Diary Entries",
-            style = MaterialTheme.typography.titleMedium
-        )
-
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            items(entries) { entry ->
-                DiaryEntryCard(entry)
+            Text(
+                text = "Diary Entries",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = "${entries.size} entries",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (entries.isEmpty()) {
+            // Show empty state
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "No diary entries for this day",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Say 'computer' followed by your thoughts to create an entry",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(entries, key = { it.id }) { entry ->
+                    DiaryEntryCard(entry)
+                }
             }
         }
 
