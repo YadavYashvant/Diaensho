@@ -12,14 +12,14 @@ data class SignUpRequest(
 
 @JsonClass(generateAdapter = true)
 data class SignInRequest(
-    @Json(name = "email") val email: String,
+    @Json(name = "username") val username: String,  // Changed from email to username
     @Json(name = "password") val password: String
 )
 
 @JsonClass(generateAdapter = true)
 data class AuthResponse(
     @Json(name = "token") val token: String,
-    @Json(name = "user") val user: UserDto
+    @Json(name = "user") val user: UserDto? = null
 )
 
 @JsonClass(generateAdapter = true)

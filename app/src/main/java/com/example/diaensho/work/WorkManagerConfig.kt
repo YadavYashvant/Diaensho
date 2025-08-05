@@ -1,115 +1,82 @@
 package com.example.diaensho.work
 
-import android.content.Context
+import android.util.Log
 import androidx.work.*
-import com.example.diaensho.data.repository.MainRepository
-import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class WorkManagerConfig @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val repository: MainRepository
+    private val workManager: WorkManager
 ) {
-    private var isFullyInitialized = false
-
-    fun setupPeriodicWork() {
-        setupAppUsageTracking()
-        setupDataSync()
-        scheduleImmediateSync()
-        isFullyInitialized = true
+    companion object {
+        private const val TAG = "WorkManagerConfig"
+        private const val PERIODIC_SYNC_WORK_NAME = "periodic_data_sync"
+        private const val APP_USAGE_TRACKING_WORK_NAME = "app_usage_tracking"
     }
 
-    fun isInitialized() = isFullyInitialized
+    private var isPeriodicWorkInitialized = false
 
-    fun reinitializeIfNeeded() {
-        if (!isFullyInitialized) {
-            setupPeriodicWork()
+    fun setupPeriodicWork() {
+        if (isPeriodicWorkInitialized) {
+            Log.d(TAG, "Periodic work already initialized")
+            return
+        }
+
+        try {
+            // Setup data sync work (every 6 hours)
+            val syncConstraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .setRequiresBatteryNotLow(true)
+                .build()
+
+            val syncWork = PeriodicWorkRequestBuilder<DataSyncWorker>(6, TimeUnit.HOURS)
+                .setConstraints(syncConstraints)
+                .setBackoffCriteria(
+                    BackoffPolicy.EXPONENTIAL,
+                    PeriodicWorkRequest.MIN_PERIODIC_FLEX_MILLIS,
+                    TimeUnit.MILLISECONDS
+                )
+                .build()
+
+            // Setup app usage tracking work (daily)
+            val usageConstraints = Constraints.Builder()
+                .setRequiresBatteryNotLow(true)
+                .build()
+
+            val usageWork = PeriodicWorkRequestBuilder<AppUsageTrackingWorker>(1, TimeUnit.DAYS)
+                .setConstraints(usageConstraints)
+                .setInitialDelay(1, TimeUnit.HOURS) // Start after 1 hour
+                .build()
+
+            // Enqueue both work requests
+            workManager.enqueueUniquePeriodicWork(
+                PERIODIC_SYNC_WORK_NAME,
+                ExistingPeriodicWorkPolicy.KEEP,
+                syncWork
+            )
+
+            workManager.enqueueUniquePeriodicWork(
+                APP_USAGE_TRACKING_WORK_NAME,
+                ExistingPeriodicWorkPolicy.KEEP,
+                usageWork
+            )
+
+            isPeriodicWorkInitialized = true
+            Log.i(TAG, "Periodic work setup completed")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to setup periodic work", e)
         }
     }
 
-    private fun setupAppUsageTracking() {
-        val constraints = Constraints.Builder()
-            .setRequiresBatteryNotLow(true)
-            .build()
-
-        val usageTrackingRequest = PeriodicWorkRequestBuilder<AppUsageTrackingWorker>(
-            1, TimeUnit.HOURS,
-            15, TimeUnit.MINUTES // Flex period
-        ).setConstraints(constraints)
-            .setBackoffCriteria(
-                BackoffPolicy.LINEAR,
-                WorkRequest.MIN_BACKOFF_MILLIS,
-                TimeUnit.MILLISECONDS
-            )
-            .build()
-
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            WORK_NAME_USAGE_TRACKING,
-            ExistingPeriodicWorkPolicy.UPDATE,
-            usageTrackingRequest
-        )
-    }
-
-    private fun setupDataSync() {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .setRequiresBatteryNotLow(true)
-            .build()
-
-        val syncRequest = PeriodicWorkRequestBuilder<DataSyncWorker>(
-            6, TimeUnit.HOURS,
-            1, TimeUnit.HOURS // Flex period
-        ).setConstraints(constraints)
-            .setBackoffCriteria(
-                BackoffPolicy.EXPONENTIAL,
-                WorkRequest.MIN_BACKOFF_MILLIS,
-                TimeUnit.MILLISECONDS
-            )
-            .build()
-
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            WORK_NAME_DATA_SYNC,
-            ExistingPeriodicWorkPolicy.UPDATE,
-            syncRequest
-        )
-    }
-
-    private fun scheduleImmediateSync() {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
-
-        val immediateSync = OneTimeWorkRequestBuilder<DataSyncWorker>()
-            .setConstraints(constraints)
-            .setBackoffCriteria(
-                BackoffPolicy.EXPONENTIAL,
-                WorkRequest.MIN_BACKOFF_MILLIS,
-                TimeUnit.MILLISECONDS
-            )
-            .build()
-
-        WorkManager.getInstance(context).enqueueUniqueWork(
-            WORK_NAME_IMMEDIATE_SYNC,
-            ExistingWorkPolicy.KEEP,
-            immediateSync
-        )
-    }
-
-    fun requestImmediateSync() {
-        scheduleImmediateSync()
-    }
+    fun isInitialized(): Boolean = isPeriodicWorkInitialized
 
     fun cancelAllWork() {
-        WorkManager.getInstance(context).cancelAllWork()
-        isFullyInitialized = false
-    }
-
-    companion object {
-        private const val WORK_NAME_USAGE_TRACKING = "usage_tracking"
-        private const val WORK_NAME_DATA_SYNC = "data_sync"
-        private const val WORK_NAME_IMMEDIATE_SYNC = "immediate_sync"
+        workManager.cancelUniqueWork(PERIODIC_SYNC_WORK_NAME)
+        workManager.cancelUniqueWork(APP_USAGE_TRACKING_WORK_NAME)
+        isPeriodicWorkInitialized = false
+        Log.i(TAG, "All periodic work cancelled")
     }
 }

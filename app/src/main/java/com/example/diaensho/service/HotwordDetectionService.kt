@@ -20,8 +20,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
-import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 
@@ -116,7 +116,7 @@ class HotwordDetectionService : Service() {
     private fun startDiaryRecording() {
         currentState = ServiceState.RECORDING_DIARY_ENTRY
         diaryContent.clear()
-        lastSpeechTime = System.currentTimeMillis() // Initialize speech time
+        lastSpeechTime = System.currentTimeMillis()
 
         updateNotification("📝 Recording diary entry... Say '$END_PHRASE' when done")
 
@@ -136,44 +136,40 @@ class HotwordDetectionService : Service() {
         // Start silence monitoring
         startSilenceMonitoring()
 
-        // Add a small delay to allow user to start speaking after wake word
-        // Use Main dispatcher for SpeechRecognizer initialization
-        serviceScope.launch(Dispatchers.Main) {
-            delay(3000) // 3 second delay to allow user to prepare
+        // Start speech recognition on Main dispatcher
+        serviceScope.launch {
+            withContext(Dispatchers.Main) {
+                delay(3000) // 3 second delay to allow user to prepare
 
-            // Start speech recognition for diary content
-            val success = speechToTextManager.startListening(
-                onResult = { result ->
-                    handleSpeechResult(result)
-                },
-                onError = { error ->
-                    Log.e(TAG, "Speech recognition error: $error")
-                    // Always try to save whatever content we have
-                    if (diaryContent.isNotEmpty()) {
-                        finalizeDiaryEntry("Recognition error, but saved content: ${diaryContent}")
-                    } else {
-                        // Give user another chance instead of immediate error
-                        restartDiaryRecording()
-                    }
-                },
-                onComplete = {
-                    if (currentState == ServiceState.RECORDING_DIARY_ENTRY) {
-                        // Speech recognition completed - save whatever we have
+                val success = speechToTextManager.startListening(
+                    onResult = { result ->
+                        handleSpeechResult(result)
+                    },
+                    onError = { error ->
+                        Log.e(TAG, "Speech recognition error: $error")
                         if (diaryContent.isNotEmpty()) {
-                            finalizeDiaryEntry("Recording completed")
+                            finalizeDiaryEntry("Recognition error, but saved content")
                         } else {
-                            // Try again if no content was captured
                             restartDiaryRecording()
                         }
-                    }
-                },
-                preferOffline = false, // Use online for better accuracy
-                maxResults = 5 // Increase for better results
-            )
+                    },
+                    onComplete = {
+                        if (currentState == ServiceState.RECORDING_DIARY_ENTRY) {
+                            if (diaryContent.isNotEmpty()) {
+                                finalizeDiaryEntry("Recording completed")
+                            } else {
+                                restartDiaryRecording()
+                            }
+                        }
+                    },
+                    preferOffline = false,
+                    maxResults = 5
+                )
 
-            if (!success) {
-                Log.e(TAG, "Failed to start speech recognition")
-                handleError("Failed to start speech recognition")
+                if (!success) {
+                    Log.e(TAG, "Failed to start speech recognition")
+                    handleError("Failed to start speech recognition")
+                }
             }
         }
 
@@ -211,7 +207,7 @@ class HotwordDetectionService : Service() {
 
                 val timeSinceLastSpeech = System.currentTimeMillis() - lastSpeechTime
                 if (timeSinceLastSpeech > SILENCE_TIMEOUT_MS) {
-                    Log.i(TAG, "Silence timeout reached after ${timeSinceLastSpeech}ms")
+                    Log.i(TAG, "Silence timeout reached")
                     if (currentState == ServiceState.RECORDING_DIARY_ENTRY) {
                         finalizeDiaryEntry("Silence timeout after 10 seconds")
                         break
@@ -241,7 +237,6 @@ class HotwordDetectionService : Service() {
                 .trim()
 
             if (contentWithoutEndPhrase.isNotEmpty()) {
-                // Add the final content (without end phrase)
                 if (diaryContent.isNotEmpty()) diaryContent.append(" ")
                 diaryContent.append(contentWithoutEndPhrase)
             }
@@ -250,27 +245,29 @@ class HotwordDetectionService : Service() {
             return
         }
 
-        // For partial results, update both notification AND accumulate content
-        if (result.isPartial) {
-            // Always accumulate partial results in case they don't become final
-            if (diaryContent.isEmpty()) {
-                diaryContent.append(text)
-            } else {
-                // Replace the content with the latest partial result (which is cumulative)
+        // MODIFIED: Always accumulate speech content, regardless of whether it's partial or final
+        // This ensures we capture content even if we only get partial results
+        if (text.length > 3) { // Only accumulate if text is meaningful (more than 3 characters)
+            // Update diary content with the latest speech
+            if (result.isPartial) {
+                // For partial results, update notification but also keep the content
+                updateNotification("📝 \"$text...\" Say '$END_PHRASE' when done")
+
+                // Update the current content (we'll use the latest partial result)
                 diaryContent.clear()
                 diaryContent.append(text)
+            } else {
+                // For final results, definitely accumulate the content
+                if (diaryContent.isNotEmpty()) {
+                    diaryContent.append(" ")
+                }
+                diaryContent.append(text)
+
+                Log.i(TAG, "Final speech result added to diary: '$text'")
+                Log.d(TAG, "Current diary content: '${diaryContent}'")
+
+                updateNotification("📝 Recorded: \"${text}\" Continue or say '$END_PHRASE'")
             }
-            updateNotification("📝 \"$text...\" Say '$END_PHRASE' when done")
-            Log.v(TAG, "Partial content accumulated: '${diaryContent}'")
-        } else {
-            // For final results, replace any partial content with the final version
-            diaryContent.clear()
-            diaryContent.append(text)
-
-            Log.i(TAG, "Final speech result added to diary: '$text'")
-            Log.d(TAG, "Current diary content: '${diaryContent}'")
-
-            updateNotification("📝 Recorded: \"${text}\" Continue or say '$END_PHRASE'")
         }
     }
 
@@ -287,8 +284,14 @@ class HotwordDetectionService : Service() {
         recordingTimeoutJob?.cancel()
         silenceTimeoutJob?.cancel()
 
-        serviceScope.launch(Dispatchers.Main) {
-            speechToTextManager.stopListening()
+        serviceScope.launch {
+            withContext(Dispatchers.Main) {
+                try {
+                    speechToTextManager.stopListening()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error stopping speech recognition", e)
+                }
+            }
         }
 
         val finalContent = diaryContent.toString().trim()
@@ -335,13 +338,19 @@ class HotwordDetectionService : Service() {
         Log.e(TAG, "Service error: $message")
         currentState = ServiceState.ERROR
 
-        // Stop all ongoing operations on main thread
+        // Stop all ongoing operations
         recordingTimeoutJob?.cancel()
         silenceTimeoutJob?.cancel()
         wakeWordDetector.stopListening()
 
-        serviceScope.launch(Dispatchers.Main) {
-            speechToTextManager.stopListening()
+        serviceScope.launch {
+            withContext(Dispatchers.Main) {
+                try {
+                    speechToTextManager.stopListening()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error stopping speech recognition during error handling", e)
+                }
+            }
         }
 
         updateNotification("❌ Error: $message")
@@ -364,6 +373,7 @@ class HotwordDetectionService : Service() {
         diaryContent.clear()
         recordingTimeoutJob?.cancel()
         restartJob?.cancel()
+        silenceTimeoutJob?.cancel()
 
         // Small delay to ensure clean restart
         serviceScope.launch {
@@ -376,40 +386,39 @@ class HotwordDetectionService : Service() {
         Log.i(TAG, "Restarting diary recording due to no speech detected")
         updateNotification("⚠️ No speech detected, trying again... Speak now!")
 
-        // Use Main dispatcher for SpeechRecognizer initialization
-        serviceScope.launch(Dispatchers.Main) {
-            delay(2000) // 2 second delay before retry
+        serviceScope.launch {
+            withContext(Dispatchers.Main) {
+                delay(2000) // 2 second delay before retry
 
-            val success = speechToTextManager.startListening(
-                onResult = { result ->
-                    handleSpeechResult(result)
-                },
-                onError = { error ->
-                    Log.e(TAG, "Speech recognition retry error: $error")
-                    // After retry fails, go back to wake word detection
-                    handleError("Speech recognition failed after retry: $error")
-                },
-                onComplete = {
-                    if (currentState == ServiceState.RECORDING_DIARY_ENTRY) {
-                        if (diaryContent.isNotEmpty()) {
-                            finalizeDiaryEntry("Recording completed")
-                        } else {
-                            // Final fallback - go back to wake word detection
-                            Log.w(TAG, "No content captured after retry")
-                            updateNotification("⚠️ No content recorded")
-                            serviceScope.launch {
-                                delay(2000)
-                                restartWakeWordDetection()
+                val success = speechToTextManager.startListening(
+                    onResult = { result ->
+                        handleSpeechResult(result)
+                    },
+                    onError = { error ->
+                        Log.e(TAG, "Speech recognition retry error: $error")
+                        handleError("Speech recognition failed after retry: $error")
+                    },
+                    onComplete = {
+                        if (currentState == ServiceState.RECORDING_DIARY_ENTRY) {
+                            if (diaryContent.isNotEmpty()) {
+                                finalizeDiaryEntry("Recording completed")
+                            } else {
+                                Log.w(TAG, "No content captured after retry")
+                                updateNotification("⚠️ No content recorded")
+                                serviceScope.launch {
+                                    delay(2000)
+                                    restartWakeWordDetection()
+                                }
                             }
                         }
-                    }
-                },
-                preferOffline = false,
-                maxResults = 5
-            )
+                    },
+                    preferOffline = false,
+                    maxResults = 5
+                )
 
-            if (!success) {
-                handleError("Failed to restart speech recognition")
+                if (!success) {
+                    handleError("Failed to restart speech recognition")
+                }
             }
         }
     }
@@ -437,6 +446,7 @@ class HotwordDetectionService : Service() {
         // Clean up all resources
         recordingTimeoutJob?.cancel()
         restartJob?.cancel()
+        silenceTimeoutJob?.cancel()
 
         wakeWordDetector.release()
         speechToTextManager.release()

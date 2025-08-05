@@ -6,6 +6,7 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.diaensho.data.repository.MainRepository
+import com.example.diaensho.data.repository.AuthRepository
 import com.example.diaensho.notification.NotificationHelper
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -16,11 +17,12 @@ import java.util.concurrent.TimeUnit
 
 @HiltWorker
 class DataSyncWorker @AssistedInject constructor(
-    @Assisted appContext: Context,
+    @Assisted context: Context,
     @Assisted workerParams: WorkerParameters,
     private val repository: MainRepository,
+    private val authRepository: AuthRepository,
     private val notificationHelper: NotificationHelper
-) : CoroutineWorker(appContext, workerParams) {
+) : CoroutineWorker(context, workerParams) {
 
     companion object {
         private const val TAG = "DataSyncWorker"
@@ -29,6 +31,13 @@ class DataSyncWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result = coroutineScope {
         try {
+            // Check if user is authenticated before attempting sync
+            if (!authRepository.isLoggedIn()) {
+                Log.w(TAG, "User not authenticated - skipping sync")
+                notificationHelper.updateSyncNotification("Sync skipped - please sign in")
+                return@coroutineScope Result.success()
+            }
+
             notificationHelper.updateSyncNotification("Starting data synchronization...")
 
             withTimeout(TimeUnit.MINUTES.toMillis(SYNC_TIMEOUT_MINUTES)) {
@@ -40,6 +49,15 @@ class DataSyncWorker @AssistedInject constructor(
                         true
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to sync diary entries", e)
+
+                        // Handle authentication errors specifically
+                        if (e.message?.contains("Authentication required") == true) {
+                            Log.w(TAG, "Authentication expired during sync")
+                            authRepository.signOut() // Clear invalid auth data
+                            notificationHelper.updateSyncNotification("Authentication expired - please sign in again")
+                            return@async false
+                        }
+
                         notificationHelper.updateSyncNotification("Failed to sync diary entries")
                         false
                     }
@@ -52,6 +70,15 @@ class DataSyncWorker @AssistedInject constructor(
                         true
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to sync app usage stats", e)
+
+                        // Handle authentication errors specifically
+                        if (e.message?.contains("Authentication required") == true) {
+                            Log.w(TAG, "Authentication expired during sync")
+                            authRepository.signOut() // Clear invalid auth data
+                            notificationHelper.updateSyncNotification("Authentication expired - please sign in again")
+                            return@async false
+                        }
+
                         notificationHelper.updateSyncNotification("Failed to sync app usage stats")
                         false
                     }
@@ -64,6 +91,10 @@ class DataSyncWorker @AssistedInject constructor(
                 // Return success only if both operations succeeded
                 if (entriesSynced && statsSynced) {
                     notificationHelper.updateSyncNotification("Sync completed successfully")
+                    Result.success()
+                } else if (entriesSynced || statsSynced) {
+                    // Partial success - some data synced
+                    notificationHelper.updateSyncNotification("Sync partially completed")
                     Result.success()
                 } else {
                     notificationHelper.updateSyncNotification("Sync failed, will retry later")

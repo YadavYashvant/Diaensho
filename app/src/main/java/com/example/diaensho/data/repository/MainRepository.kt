@@ -11,6 +11,7 @@ import com.example.diaensho.data.network.model.DailySummaryDto
 import com.example.diaensho.data.network.model.DiaryEntryDto
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import retrofit2.HttpException
 import java.time.LocalDate
 import java.time.LocalDateTime
 import javax.inject.Inject
@@ -79,7 +80,19 @@ class MainRepository @Inject constructor(
                     apiService.createEntry(dto)
                 }
                 diaryEntryDao.markAsSynced(unsyncedEntries.map { it.id })
+            } catch (e: HttpException) {
+                when (e.code()) {
+                    401, 403 -> {
+                        Log.e("MainRepository", "Authentication failed during sync - user needs to re-login")
+                        throw RuntimeException("Authentication required - please sign in again")
+                    }
+                    else -> {
+                        Log.e("MainRepository", "HTTP error during diary entries sync: ${e.code()}")
+                        throw RuntimeException("Failed to sync diary entries: HTTP ${e.code()}")
+                    }
+                }
             } catch (e: Exception) {
+                Log.e("MainRepository", "Failed to sync diary entries", e)
                 throw RuntimeException("Failed to sync diary entries", e)
             }
         }
@@ -98,7 +111,19 @@ class MainRepository @Inject constructor(
                 }
                 apiService.uploadUsageStats(dtos)
                 appUsageStatDao.markAsSynced(unsyncedStats.map { it.id })
+            } catch (e: HttpException) {
+                when (e.code()) {
+                    401, 403 -> {
+                        Log.e("MainRepository", "Authentication failed during sync - user needs to re-login")
+                        throw RuntimeException("Authentication required - please sign in again")
+                    }
+                    else -> {
+                        Log.e("MainRepository", "HTTP error during usage stats sync: ${e.code()}")
+                        throw RuntimeException("Failed to sync usage stats: HTTP ${e.code()}")
+                    }
+                }
             } catch (e: Exception) {
+                Log.e("MainRepository", "Failed to sync usage stats", e)
                 throw RuntimeException("Failed to sync usage stats", e)
             }
         }

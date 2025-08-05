@@ -53,39 +53,43 @@ class NotificationHelper @Inject constructor(
         }
     }
 
-    fun createHotwordNotification(status: String): Notification {
+    fun createHotwordNotification(message: String): Notification {
         return NotificationCompat.Builder(context, HOTWORD_CHANNEL_ID)
-            .setContentTitle("Diaensho Voice Assistant")
-            .setContentText(status)
+            .setContentTitle("Diaensho - Voice Detection")
+            .setContentText(message)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setOngoing(true)
-            .setSilent(true)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
 
-    fun updateHotwordNotification(status: String) {
-        val notification = createHotwordNotification(status)
+    fun updateHotwordNotification(message: String) {
+        val notification = createHotwordNotification(message)
         notificationManager.notify(HOTWORD_NOTIFICATION_ID, notification)
     }
 
-    fun createSyncNotification(status: String): Notification {
+    fun createSyncNotification(message: String): Notification {
         return NotificationCompat.Builder(context, SYNC_CHANNEL_ID)
-            .setContentTitle("Syncing Data")
-            .setContentText(status)
-            .setSmallIcon(android.R.drawable.stat_sys_upload)
+            .setContentTitle("Diaensho - Syncing Data")
+            .setContentText(message)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
             .setOngoing(true)
-            .setSilent(true)
-            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
 
-    fun updateSyncNotification(status: String) {
-        val notification = createSyncNotification(status)
+    fun updateSyncNotification(message: String) {
+        val notification = createSyncNotification(message)
         notificationManager.notify(SYNC_NOTIFICATION_ID, notification)
     }
 
     fun cancelSyncNotification() {
         notificationManager.cancel(SYNC_NOTIFICATION_ID)
+    }
+
+    fun cancelHotwordNotification() {
+        notificationManager.cancel(HOTWORD_NOTIFICATION_ID)
     }
 }

@@ -81,7 +81,7 @@ object NetworkModule {
         moshi: Moshi
     ): Retrofit {
         return Retrofit.Builder()
-            .baseUrl("http://your-backend-url.com/") // Replace with your actual backend URL
+            .baseUrl("https://diaensho-backend.onrender.com/")
             .client(okHttpClient)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
@@ -95,7 +95,7 @@ object NetworkModule {
         moshi: Moshi
     ): Retrofit {
         return Retrofit.Builder()
-            .baseUrl("http://your-backend-url.com/") // Replace with your actual backend URL
+            .baseUrl("https://diaensho-backend.onrender.com/")
             .client(okHttpClient)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
