@@ -56,7 +56,7 @@ To get the project up and running, follow these steps:
 
 * JDK 17 or later.
 
-* A running instance of the [Diaensho Backend Service](https://github.com/your-username/diaensho-backend) (link is a placeholder).
+* A running instance of the diaensho-backend.
 
 ### Installation
 
